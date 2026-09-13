@@ -448,7 +448,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle(self._WINDOW_DISPLAY_TITLE)
         self.setMinimumSize(*self._MIN_WINDOW_SIZE)
         self.resize(self._resolve_initial_window_size())
-        self.setWindowFlags(self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
+        # NOTE: do not mutate windowFlags() here. Changing flags after the
+        # window is created makes Qt rebuild the native window, which has been
+        # observed to leave the caption CLOSE button visible but unclickable.
         
         # Load window icon
         self._custom_icon = self._load_external_icon()

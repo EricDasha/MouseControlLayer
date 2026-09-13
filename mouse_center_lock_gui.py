@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from app_logging import configure_logging, get_log_path, is_logging_enabled, log_exception, log_message
 from app_runtime import HotkeyEmitter, NativeEventFilter, install_activation_server, send_activation_request
@@ -119,6 +119,13 @@ def main() -> int:
 
     _wire_hotkeys(app, window)
     window.show()
+
+    # Windows can keep a background-launched window inactive: its title-bar
+    # close button then renders grey (rgb ~205,205,206) and first click only
+    # activates. Force the window to the foreground now and again once the
+    # frame is mapped so the caption buttons stay live.
+    window.activate_from_external_request()
+    QtCore.QTimer.singleShot(250, window.activate_from_external_request)
 
     ret = app.exec()
     try:
