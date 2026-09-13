@@ -8,6 +8,7 @@ from ui.presenters.main_window_presenter import (
     build_simple_info_text,
     build_status_badge_presentation,
     build_toggle_button_text,
+    describe_clicker_swap_source,
     resolve_clicker_preset,
 )
 
@@ -125,6 +126,40 @@ class MainWindowPresenterTests(unittest.TestCase):
 
     def test_resolve_clicker_preset_falls_back_to_custom(self):
         self.assertEqual(resolve_clicker_preset(77, {"custom": None, "efficient": 100, "extreme": 10}), "custom")
+
+    def test_describe_clicker_swap_source_key_and_mouse_and_off(self):
+        self.assertEqual(
+            describe_clicker_swap_source(self.i18n, {
+                "swapMode": "key",
+                "swapKey": {"modCtrl": True, "modAlt": False, "modShift": False, "modWin": False, "key": "F8"},
+            }),
+            "Ctrl+F8",
+        )
+        self.assertEqual(describe_clicker_swap_source(self.i18n, {"swapMode": "mouseButton", "swapMouseButton": "x2"}), "x2")
+        self.assertEqual(describe_clicker_swap_source(self.i18n, {"swapMode": "off"}), "")
+        self.assertEqual(describe_clicker_swap_source(self.i18n, {}), "")
+
+    def test_build_simple_info_text_lists_swap_source_when_configured(self):
+        config_text, _ = build_simple_info_text(
+            self.i18n,
+            settings_data={"recenter": {}, "position": {}, "windowSpecific": {}, "hotkeys": {}},
+            clicker={
+                "enabled": True,
+                "button": "left",
+                "intervalMs": 100,
+                "preset": "efficient",
+                "triggers": {
+                    "mode": "toggle",
+                    "swapMode": "key",
+                    "swapKey": {"modCtrl": True, "modAlt": False, "modShift": False, "modWin": False, "key": "F8"},
+                },
+            },
+            clicker_running=False,
+            clicker_presets={"custom": None, "efficient": 100, "extreme": 10},
+            clicker_trigger_modes={"toggle": "clicker.trigger.toggle"},
+        )
+        self.assertIn("Swap Button", config_text)
+        self.assertIn("Ctrl+F8", config_text)
 
 
 if __name__ == "__main__":

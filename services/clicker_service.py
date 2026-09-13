@@ -46,6 +46,7 @@ class ClickerService(QtCore.QObject):
         self._on_notify_stopped = on_notify_stopped
         self._running = False
         self._hold_trigger_pressed = False
+        self._swap_active = False
         self._pressed_keys: Set[str] = set()
         self._pressed_mouse_buttons: Set[str] = set()
         self._action_executor = MacroActionExecutor(
@@ -79,6 +80,11 @@ class ClickerService(QtCore.QObject):
     def is_running(self) -> bool:
         """Return whether the clicker is currently running."""
         return self._running
+
+    @property
+    def is_swapped(self) -> bool:
+        """Return whether the swap source is currently held."""
+        return self._swap_active
 
     def play_sound_preview(self, sound_config: Dict[str, Any]) -> None:
         """Preview a sound selection."""
@@ -174,13 +180,66 @@ class ClickerService(QtCore.QObject):
         process = get_window_process_name(hwnd) if hwnd else ""
         return self._check_process_match(process or "", blacklist)
 
+    def _configured_click_button(self, profile: Dict[str, Any]) -> str:
+        """Return the button configured for this profile."""
+        return str(profile.get("button", "left") or "left").lower()
+
+    def _effective_click_button(self, profile: Dict[str, Any]) -> str:
+        """Return the button to click, swapping left/right while swap is held."""
+        button = self._configured_click_button(profile)
+        if not self._swap_active:
+            return button
+        return {"left": "right", "right": "left"}.get(button, button)
+
+    def _swap_mode(self, profile: Dict[str, Any]) -> str:
+        """Return the normalized swap source mode for this profile."""
+        mode = str(profile.get("triggers", {}).get("swapMode", "off") or "off").strip()
+        return mode if mode in ("off", "key", "mouseButton") else "off"
+
+    def _swap_configured(self, profile: Dict[str, Any]) -> bool:
+        """Return whether this profile has a usable swap source."""
+        triggers = profile.get("triggers", {})
+        mode = self._swap_mode(profile)
+        if mode == "key":
+            return bool(str(triggers.get("swapKey", {}).get("key", "") or "").strip())
+        if mode == "mouseButton":
+            return bool(str(triggers.get("swapMouseButton", "") or "").strip())
+        return False
+
+    def _swap_source_pressed(self, profile: Dict[str, Any], *, fallback_allowed: bool) -> bool:
+        """Return whether the configured swap source is currently held."""
+        triggers = profile.get("triggers", {})
+        mode = self._swap_mode(profile)
+        if mode == "key":
+            swap_key = triggers.get("swapKey", {})
+            if self._hook_mode_active:
+                return self._hold_hotkey_matches_events(swap_key)
+            if fallback_allowed:
+                return self._hold_hotkey_matches(swap_key)
+            return self._swap_active
+        if mode == "mouseButton":
+            button = str(triggers.get("swapMouseButton", "") or "").lower()
+            if not button:
+                return False
+            if self._hook_mode_active:
+                return button in self._pressed_mouse_buttons
+            if fallback_allowed:
+                return self._mouse_button_pressed(button)
+            return self._swap_active
+        return False
+
+    def _update_swap_state(self, profile: Dict[str, Any], *, fallback_allowed: bool) -> None:
+        """Refresh the cached swap state used by the click timer."""
+        self._swap_active = self._swap_source_pressed(profile, fallback_allowed=fallback_allowed)
+
     def _click_once(self, profile: Dict[str, Any]) -> None:
         """Click once unless the active process is blacklisted."""
         if self._is_active_process_blocked(profile):
             if self._running:
                 self.stop(show_message=False)
             return
-        button = str(profile.get("button", "left") or "left").lower()
+        self._update_swap_state(profile, fallback_allowed=not self._hook_mode_active)
+        button = self._effective_click_button(profile)
         configured_hold_ms = profile.get("clickHoldMs")
         if configured_hold_ms is None:
             # Compatibility for callers that inject the legacy click function.
@@ -261,13 +320,13 @@ class ClickerService(QtCore.QObject):
 
     def _emit_key_event(self, key_name: str, is_pressed: bool) -> None:
         """Bridge low-level key events into the Qt thread."""
-        if not self._hold_detection_required(self._get_profile()):
+        if not self._input_detection_required(self._get_profile()):
             return
         self.inputEvent.emit("key", key_name, is_pressed)
 
     def _emit_mouse_event(self, button_name: str, is_pressed: bool) -> None:
         """Bridge low-level mouse events into the Qt thread."""
-        if not self._hold_detection_required(self._get_profile()):
+        if not self._input_detection_required(self._get_profile()):
             return
         self.inputEvent.emit("mouse", button_name, is_pressed)
 
@@ -292,22 +351,29 @@ class ClickerService(QtCore.QObject):
         if self._hook_mode_active:
             self._evaluate_hold_trigger_state(self._get_profile(), fallback_allowed=False)
 
-    def _hold_detection_required(self, profile: Dict[str, Any]) -> bool:
-        """Return whether this profile needs low-level hold-trigger detection."""
-        triggers = profile.get("triggers", {})
-        mode = triggers.get("mode")
-        return bool(mode in ("holdKey", "holdMouseButton") and profile.get("enabled", False))
+    def _input_detection_required(self, profile: Dict[str, Any]) -> bool:
+        """Return whether this profile needs low-level input detection.
+
+        Hold triggers and the button-swap source both rely on the same
+        keyboard/mouse state tracking.
+        """
+        if not profile.get("enabled", False):
+            return False
+        if self._swap_configured(profile):
+            return True
+        mode = profile.get("triggers", {}).get("mode")
+        return mode in ("holdKey", "holdMouseButton")
 
     def _sync_hold_detection_mode(self, profile: Dict[str, Any]) -> None:
         """Enable the polling fallback only when hook mode is unavailable."""
-        hold_mode = self._hold_detection_required(profile)
+        detection_mode = self._input_detection_required(profile)
 
-        if hold_mode and not self._hook_mode_active:
+        if detection_mode and not self._hook_mode_active:
             self._hook_mode_active = self._input_listener.start()
             if not self._hook_mode_active:
                 self._input_listener.stop()
 
-        if not hold_mode:
+        if not detection_mode:
             self._input_listener.stop()
             self._hook_mode_active = False
 
@@ -315,14 +381,15 @@ class ClickerService(QtCore.QObject):
             if self.hold_state_timer.isActive():
                 self.hold_state_timer.stop()
         else:
-            if hold_mode:
+            if detection_mode:
                 if not self.hold_state_timer.isActive():
                     self.hold_state_timer.start(12)
             elif self.hold_state_timer.isActive():
                 self.hold_state_timer.stop()
-        if not hold_mode:
+        if not detection_mode:
             self._pressed_keys.clear()
             self._pressed_mouse_buttons.clear()
+            self._swap_active = False
 
     def _modifier_name_map(self) -> Dict[str, str]:
         """Map config modifier flags to tracked key names."""
@@ -350,15 +417,19 @@ class ClickerService(QtCore.QObject):
         """Start or stop the clicker based on the active hold-trigger state."""
         triggers = profile.get("triggers", {})
         if not profile.get("enabled", False):
+            self._swap_active = False
             if self._hold_trigger_pressed:
                 self._hold_trigger_pressed = False
                 self.stop(show_message=False)
             return
         if self._is_active_process_blocked(profile):
+            self._swap_active = False
             if self._hold_trigger_pressed:
                 self._hold_trigger_pressed = False
             self.stop(show_message=False)
             return
+
+        self._update_swap_state(profile, fallback_allowed=fallback_allowed)
 
         mode = triggers.get("mode")
         if mode == "holdKey":

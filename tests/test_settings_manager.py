@@ -189,10 +189,46 @@ class SettingsManagerTests(unittest.TestCase):
                     "clickHoldMs": "12",
                 }
             ]
-        }
+}
         settings._set_defaults()
 
         self.assertEqual(settings.data["clickerProfiles"][0]["clickHoldMs"], 12)
+
+    def test_clicker_profile_defaults_and_normalizes_swap_trigger(self):
+        settings = settings_manager.SettingsManager.__new__(settings_manager.SettingsManager)
+        settings.loaded_from_path = ""
+        settings.last_error = ""
+        settings.data = {
+            "clickerProfiles": [
+                {
+                    "id": "default",
+                    "name": "Default",
+                    "triggers": {
+                        "swapMode": "key",
+                        "swapKey": {"modCtrl": True, "modShift": False, "key": "F8"},
+                        "swapMouseButton": "x2",
+                    },
+                }
+            ]
+        }
+        settings._set_defaults()
+
+        triggers = settings.data["clickerProfiles"][0]["triggers"]
+        self.assertEqual(triggers["swapMode"], "key")
+        self.assertEqual(
+            triggers["swapKey"],
+            {"modCtrl": True, "modAlt": False, "modShift": False, "modWin": False, "key": "F8"},
+        )
+        self.assertEqual(triggers["swapMouseButton"], "x2")
+
+        # Sanitize an invalid swap mode back to disabled with a fresh key field.
+        settings.data["clickerProfiles"][0]["triggers"]["swapMode"] = "bogus"
+        settings.data["clickerProfiles"][0]["triggers"]["swapKey"] = {"key": ""}
+        settings._ensure_clicker_profiles()
+        triggers = settings.data["clickerProfiles"][0]["triggers"]
+        self.assertEqual(triggers["swapMode"], "off")
+        self.assertEqual(triggers["swapKey"]["key"], "")
+        self.assertEqual(triggers["swapMouseButton"], "x2")
 
     def test_clicker_profile_normalizes_input_backend(self):
         settings = settings_manager.SettingsManager.__new__(settings_manager.SettingsManager)

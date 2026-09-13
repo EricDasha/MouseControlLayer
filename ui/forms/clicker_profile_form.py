@@ -64,12 +64,15 @@ def collect_clicker_profile_form_data(window) -> Dict[str, Any]:
                 "customFile": window.clickerStopCustomSoundPathEdit.text().strip() if hasattr(window, "clickerStopCustomSoundPathEdit") else "",
             },
         },
-        "processBlacklist": _collect_list_widget_items(window.clickerProcessBlacklist),
+"processBlacklist": _collect_list_widget_items(window.clickerProcessBlacklist),
         "triggers": {
             "mode": window.clickerTriggerModeCombo.currentData() or "toggle",
             "toggleHotkey": window.clickerToggleHotkeyCapture.get_hotkey(),
             "holdKey": window.clickerHoldKeyCapture.get_hotkey(),
             "holdMouseButton": window.clickerHoldMouseCombo.currentData() or "middle",
+            "swapMode": window.clickerSwapModeCombo.currentData() or "off",
+            "swapKey": window.clickerSwapKeyCapture.get_hotkey(),
+            "swapMouseButton": window.clickerSwapMouseCombo.currentData() or "x1",
         },
         "featureSettings": feature_settings,
     }
@@ -118,6 +121,18 @@ def load_clicker_profile_into_form(window, profile: Dict[str, Any]) -> None:
         for i in range(window.clickerHoldMouseCombo.count()):
             if window.clickerHoldMouseCombo.itemData(i) == triggers.get("holdMouseButton", "middle"):
                 window.clickerHoldMouseCombo.setCurrentIndex(i)
+                break
+
+        for i in range(window.clickerSwapModeCombo.count()):
+            if window.clickerSwapModeCombo.itemData(i) == triggers.get("swapMode", "off"):
+                window.clickerSwapModeCombo.setCurrentIndex(i)
+                break
+        window.clickerSwapKeyCapture.set_hotkey(
+            triggers.get("swapKey", window.settings.DEFAULT_SWAP_KEY)
+        )
+        for i in range(window.clickerSwapMouseCombo.count()):
+            if window.clickerSwapMouseCombo.itemData(i) == triggers.get("swapMouseButton", "x1"):
+                window.clickerSwapMouseCombo.setCurrentIndex(i)
                 break
 
         sound = profile.get("sound", {})

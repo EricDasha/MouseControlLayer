@@ -11,12 +11,13 @@ class HotkeyCapture(QtWidgets.QLineEdit):
     Minecraft-style hotkey capture input.
     Click to focus, then press any key combination to capture it.
     """
-    
+
     hotkeyChanged = QtCore.Signal(dict)  # Emits the new hotkey config
-    
-    def __init__(self, parent=None, i18n=None):
+
+    def __init__(self, parent=None, i18n=None, allow_simple=False):
         super().__init__(parent)
         self.i18n = i18n
+        self._allow_simple = bool(allow_simple)
         self._hotkey_config: Dict[str, Any] = {
             "modCtrl": False,
             "modAlt": False,
@@ -174,12 +175,12 @@ class HotkeyCapture(QtWidgets.QLineEdit):
             new_config["modShift"], new_config["modWin"]
         ])
         
-        if not has_modifier:
+        if not has_modifier and not self._allow_simple:
             # Show warning dialog but still allow the setting
             reply = QtWidgets.QMessageBox.warning(
                 self.window() if self.window() else None,
                 self._get_text("hotkey.simple.title", "Simple Hotkey Warning"),
-                self._get_text("hotkey.simple.message", 
+                self._get_text("hotkey.simple.message",
                     "Setting a hotkey without Ctrl/Alt/Shift/Win may interfere with normal keyboard use.\n\n"
                     "Are you sure you want to use this hotkey?"),
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
@@ -488,6 +489,7 @@ class CloseActionDialog(QtWidgets.QDialog):
         
         self.minimizeBtn = QtWidgets.QPushButton(self._t("close.dialog.minimize", "Minimize to Tray"))
         self.minimizeBtn.setCursor(QtCore.Qt.PointingHandCursor)
+        self.minimizeBtn.setEnabled(QtWidgets.QSystemTrayIcon.isSystemTrayAvailable())
         self.minimizeBtn.clicked.connect(self._on_minimize)
         
         self.quitBtn = QtWidgets.QPushButton(self._t("close.dialog.quit", "Quit Application"))

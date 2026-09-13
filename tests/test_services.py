@@ -1221,6 +1221,175 @@ class ServiceTests(unittest.TestCase):
             service.hold_state_timer.stop()
             service.clicker_timer.stop()
 
+    def test_clicker_service_swap_key_swaps_click_button_while_held(self):
+        profile = {
+            "enabled": True,
+            "button": "left",
+            "intervalMs": 25,
+            "sound": {"enabled": False, "preset": "systemAsterisk", "customFile": ""},
+            "triggers": {
+                "mode": "toggle",
+                "swapMode": "key",
+                "swapKey": {
+                    "modCtrl": False,
+                    "modAlt": False,
+                    "modShift": False,
+                    "modWin": False,
+                    "key": "F8",
+                },
+            },
+        }
+        click_mouse = mock.Mock()
+        service = ClickerService(
+            get_profile=lambda: profile,
+            on_state_changed=lambda: None,
+            on_notify_started=lambda _profile: None,
+            on_notify_stopped=lambda _profile: None,
+            click_mouse_func=click_mouse,
+            input_listener_factory=_FakeInputListener,
+        )
+
+        self.assertTrue(service._input_listener.started)
+        self.assertTrue(service._hook_mode_active)
+
+        service.start(show_message=False, immediate_click=True)
+        click_mouse.assert_called_once_with("left")
+
+        service._on_global_input_event("key", "f8", True)
+        service._click_once(profile)
+        click_mouse.assert_called_with("right")
+
+        service._on_global_input_event("key", "f8", False)
+        service._click_once(profile)
+        click_mouse.assert_called_with("left")
+
+        service.hold_state_timer.stop()
+        service.clicker_timer.stop()
+
+    def test_clicker_service_swap_mouse_button_swaps_while_held(self):
+        profile = {
+            "enabled": True,
+            "button": "right",
+            "intervalMs": 25,
+            "sound": {"enabled": False, "preset": "systemAsterisk", "customFile": ""},
+            "triggers": {
+                "mode": "toggle",
+                "swapMode": "mouseButton",
+                "swapMouseButton": "x1",
+            },
+        }
+        click_mouse = mock.Mock()
+        service = ClickerService(
+            get_profile=lambda: profile,
+            on_state_changed=lambda: None,
+            on_notify_started=lambda _profile: None,
+            on_notify_stopped=lambda _profile: None,
+            click_mouse_func=click_mouse,
+            input_listener_factory=_FakeInputListener,
+        )
+
+        service.start(show_message=False, immediate_click=True)
+        click_mouse.assert_called_once_with("right")
+
+        service._on_global_input_event("mouse", "x1", True)
+        service._click_once(profile)
+        click_mouse.assert_called_with("left")
+
+        service._on_global_input_event("mouse", "x1", False)
+        service._click_once(profile)
+        click_mouse.assert_called_with("right")
+
+        service.hold_state_timer.stop()
+        service.clicker_timer.stop()
+
+    def test_clicker_service_swap_keeps_middle_button_unaffected(self):
+        profile = {
+            "enabled": True,
+            "button": "middle",
+            "intervalMs": 25,
+            "sound": {"enabled": False, "preset": "systemAsterisk", "customFile": ""},
+            "triggers": {
+                "mode": "toggle",
+                "swapMode": "key",
+                "swapKey": {"modCtrl": False, "modAlt": False, "modShift": False, "modWin": False, "key": "F8"},
+            },
+        }
+        click_mouse = mock.Mock()
+        service = ClickerService(
+            get_profile=lambda: profile,
+            on_state_changed=lambda: None,
+            on_notify_started=lambda _profile: None,
+            on_notify_stopped=lambda _profile: None,
+            click_mouse_func=click_mouse,
+            input_listener_factory=_FakeInputListener,
+        )
+
+        service.start(show_message=False, immediate_click=True)
+        service._on_global_input_event("key", "f8", True)
+        service._click_once(profile)
+        click_mouse.assert_any_call("middle")
+
+        service.hold_state_timer.stop()
+        service.clicker_timer.stop()
+
+    def test_clicker_service_swap_falls_back_to_polling_when_hook_unavailable(self):
+        class _FailedInputListener(_FakeInputListener):
+            def start(self):
+                self.started = True
+                return False
+
+        profile = {
+            "enabled": True,
+            "button": "left",
+            "intervalMs": 25,
+            "sound": {"enabled": False, "preset": "systemAsterisk", "customFile": ""},
+            "triggers": {
+                "mode": "toggle",
+                "swapMode": "key",
+                "swapKey": {
+                    "modCtrl": False,
+                    "modAlt": False,
+                    "modShift": False,
+                    "modWin": False,
+                    "key": "F8",
+                },
+            },
+        }
+        click_mouse = mock.Mock()
+        service = ClickerService(
+            get_profile=lambda: profile,
+            on_state_changed=lambda: None,
+            on_notify_started=lambda _profile: None,
+            on_notify_stopped=lambda _profile: None,
+            click_mouse_func=click_mouse,
+            input_listener_factory=_FailedInputListener,
+        )
+
+        self.assertTrue(service.hold_state_timer.isActive())
+        self.assertFalse(service._hook_mode_active)
+
+        f8_held = {"value": False}
+
+        def fake_modifier_pressed(vk):
+            return bool(vk == 0x77 and f8_held["value"])
+
+        with mock.patch.object(service, "_modifier_pressed", side_effect=fake_modifier_pressed):
+            service.start(show_message=False, immediate_click=True)
+            click_mouse.assert_called_once_with("left")
+
+            f8_held["value"] = True
+            service._poll_hold_trigger_state()
+            service._click_once(profile)
+            click_mouse.assert_called_with("right")
+
+            f8_held["value"] = False
+            service._poll_hold_trigger_state()
+            service._click_once(profile)
+            click_mouse.assert_called_with("left")
+
+        service.hold_state_timer.stop()
+        service.clicker_timer.stop()
+
     def test_clicker_service_falls_back_to_polling_when_hook_unavailable(self):
         class _FailedInputListener(_FakeInputListener):
             def start(self):

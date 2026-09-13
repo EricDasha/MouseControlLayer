@@ -11,47 +11,32 @@ from win_api import is_startup_enabled
 
 def build_advanced_page(window) -> QtWidgets.QWidget:
     """Build the advanced settings page and attach widgets to the window."""
+
     page = QtWidgets.QWidget()
 
-    scroll = QtWidgets.QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+    tabs = QtWidgets.QTabWidget()
+    root_layout = QtWidgets.QVBoxLayout(page)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.addWidget(tabs)
 
-    content = QtWidgets.QWidget()
-    layout = QtWidgets.QVBoxLayout(content)
-    layout.setContentsMargins(8, 8, 8, 8)
-    layout.setSpacing(16)
+    def _make_tab(title: str) -> QtWidgets.QVBoxLayout:
+        tab = QtWidgets.QWidget()
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        content = QtWidgets.QWidget()
+        tab_layout = QtWidgets.QVBoxLayout(content)
+        tab_layout.setContentsMargins(8, 8, 8, 8)
+        tab_layout.setSpacing(16)
+        scroll.setWidget(content)
+        tab_outer = QtWidgets.QVBoxLayout(tab)
+        tab_outer.setContentsMargins(0, 0, 0, 0)
+        tab_outer.addWidget(scroll)
+        tabs.addTab(tab, title)
+        return tab_layout
 
-    layout.addWidget(create_section_label(window.i18n.t("section.hotkeys", "Hotkeys")))
-
-    hotkey_grid = QtWidgets.QGridLayout()
-    hotkey_grid.setSpacing(12)
-
-    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.lock", "Lock")), 0, 0)
-    window.lockHotkeyCapture = HotkeyCapture(i18n=window.i18n)
-    window.lockHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["lock"])
-    window.lockHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
-    hotkey_grid.addWidget(window.lockHotkeyCapture, 0, 1)
-
-    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.unlock", "Unlock")), 1, 0)
-    window.unlockHotkeyCapture = HotkeyCapture(i18n=window.i18n)
-    window.unlockHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["unlock"])
-    window.unlockHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
-    hotkey_grid.addWidget(window.unlockHotkeyCapture, 1, 1)
-
-    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.toggle", "Toggle")), 2, 0)
-    window.toggleHotkeyCapture = HotkeyCapture(i18n=window.i18n)
-    window.toggleHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["toggle"])
-    window.toggleHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
-    hotkey_grid.addWidget(window.toggleHotkeyCapture, 2, 1)
-
-    hotkey_hint = QtWidgets.QLabel(
-        window.i18n.t("clicker.hotkey.profileHint", "Auto clicker trigger keys are configured per clicker profile below.")
-    )
-    hotkey_hint.setWordWrap(True)
-    hotkey_hint.setStyleSheet("color: rgba(142, 142, 147, 0.95); font-size: 12px;")
-    hotkey_grid.addWidget(hotkey_hint, 3, 0, 1, 2)
-    layout.addLayout(hotkey_grid)
+    # Window category: recenter behavior, target position, window-specific locking, window tools
+    layout = _make_tab(window.i18n.t("adv.category.window", "Window"))
 
     layout.addWidget(create_section_label(window.i18n.t("section.behavior", "Behavior")))
 
@@ -70,6 +55,108 @@ def build_advanced_page(window) -> QtWidgets.QWidget:
     interval_layout.addWidget(window.recenterSpin)
     interval_layout.addStretch()
     layout.addLayout(interval_layout)
+
+    layout.addWidget(create_section_label(window.i18n.t("position.title", "Target Position")))
+    pos_layout = QtWidgets.QHBoxLayout()
+    window.posCombo = QtWidgets.QComboBox()
+    window.posCombo.addItem(window.i18n.t("position.virtualCenter", "Virtual screen center"), "virtualCenter")
+    window.posCombo.addItem(window.i18n.t("position.primaryCenter", "Primary screen center"), "primaryCenter")
+    window.posCombo.addItem(window.i18n.t("position.custom", "Custom"), "custom")
+    window.posCombo.currentIndexChanged.connect(lambda _index: window._schedule_live_apply())
+    current_mode = window.settings.data["position"].get("mode", "virtualCenter")
+    for i in range(window.posCombo.count()):
+        if window.posCombo.itemData(i) == current_mode:
+            window.posCombo.setCurrentIndex(i)
+            break
+    pos_layout.addWidget(window.posCombo)
+    layout.addLayout(pos_layout)
+
+    custom_layout = QtWidgets.QHBoxLayout()
+    custom_layout.addWidget(QtWidgets.QLabel("X:"))
+    window.customXSpin = QtWidgets.QSpinBox()
+    window.customXSpin.setRange(-10000, 10000)
+    window.customXSpin.setValue(window.settings.data["position"].get("customX", 0))
+    window.customXSpin.valueChanged.connect(lambda _value: window._schedule_live_apply())
+    custom_layout.addWidget(window.customXSpin)
+    custom_layout.addWidget(QtWidgets.QLabel("Y:"))
+    window.customYSpin = QtWidgets.QSpinBox()
+    window.customYSpin.setRange(-10000, 10000)
+    window.customYSpin.setValue(window.settings.data["position"].get("customY", 0))
+    window.customYSpin.valueChanged.connect(lambda _value: window._schedule_live_apply())
+    custom_layout.addWidget(window.customYSpin)
+    custom_layout.addStretch()
+    layout.addLayout(custom_layout)
+
+    layout.addWidget(create_section_label(window.i18n.t("window.specific.title", "Window-Specific Locking")))
+    window.windowSpecificCheck = QtWidgets.QCheckBox(
+        window.i18n.t("window.specific.enabled", "Enable window-specific locking")
+    )
+    window.windowSpecificCheck.setChecked(window.settings.data["windowSpecific"].get("enabled", False))
+    window.windowSpecificCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
+    layout.addWidget(window.windowSpecificCheck)
+
+    list_layout = QtWidgets.QVBoxLayout()
+    list_layout.setSpacing(8)
+    list_label = QtWidgets.QLabel(window.i18n.t("window.specific.listLabel", "Target Windows List"))
+    list_layout.addWidget(list_label)
+
+    window.targetList = QtWidgets.QListWidget()
+    window.targetList.setFixedHeight(120)
+    window.targetList.setStyleSheet("""
+        QListWidget {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(128, 128, 128, 0.3);
+            border-radius: 6px;
+            padding: 4px;
+        }
+    """)
+    for win_title in window.settings.data["windowSpecific"].get("targetWindows", []):
+        window.targetList.addItem(win_title)
+    list_layout.addWidget(window.targetList)
+
+    input_layout = QtWidgets.QHBoxLayout()
+    window.manualInputEdit = QtWidgets.QLineEdit()
+    window.manualInputEdit.setPlaceholderText(window.i18n.t("window.specific.placeholder", "Target window title"))
+    input_layout.addWidget(window.manualInputEdit)
+    window.pickProcessBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.pick", "Pick Process"))
+    window.pickProcessBtn.clicked.connect(window._pick_process)
+    input_layout.addWidget(window.pickProcessBtn)
+    list_layout.addLayout(input_layout)
+
+    btn_layout = QtWidgets.QHBoxLayout()
+    window.addBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.add", "Add"))
+    window.addBtn.clicked.connect(window._add_target_window)
+    btn_layout.addWidget(window.addBtn)
+    window.removeBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.remove", "Remove"))
+    window.removeBtn.clicked.connect(window._remove_target_window)
+    btn_layout.addWidget(window.removeBtn)
+    btn_layout.addStretch()
+    list_layout.addLayout(btn_layout)
+    layout.addLayout(list_layout)
+
+    window.autoLockCheck = QtWidgets.QCheckBox(
+        window.i18n.t("window.specific.autoLock", "Auto lock/unlock on window switch")
+    )
+    window.autoLockCheck.setChecked(window.settings.data["windowSpecific"].get("autoLockOnWindowFocus", False))
+    window.autoLockCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
+    layout.addWidget(window.autoLockCheck)
+
+    window.resumeAfterSwitchCheck = QtWidgets.QCheckBox(
+        window.i18n.t("window.specific.resumeAfterSwitch", "Auto re-lock after leaving and re-entering target window (for manual unlock)")
+    )
+    window.resumeAfterSwitchCheck.setChecked(window.settings.data["windowSpecific"].get("resumeAfterWindowSwitch", False))
+    window.resumeAfterSwitchCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
+    layout.addWidget(window.resumeAfterSwitchCheck)
+
+    layout.addWidget(create_section_label(window.i18n.t("section.windowTools", "Window Tools")))
+    window.resizeCenterBtn = QtWidgets.QPushButton(window.i18n.t("windowTools.resizeCenter", "Resize & Center Window"))
+    window.resizeCenterBtn.setFixedHeight(40)
+    window.resizeCenterBtn.setCursor(QtCore.Qt.PointingHandCursor)
+    window.resizeCenterBtn.clicked.connect(window._open_window_resize)
+    layout.addWidget(window.resizeCenterBtn)
+
+    # Mouse category: input backend, auto clicker, process blacklist, macro
+    layout = _make_tab(window.i18n.t("adv.category.mouse", "Mouse"))
 
     layout.addWidget(create_section_label(window.i18n.t("section.inputOutput", "Input Output")))
 
@@ -283,6 +370,56 @@ def build_advanced_page(window) -> QtWidgets.QWidget:
     hold_mouse_layout.addStretch()
     layout.addLayout(hold_mouse_layout)
 
+    swap_mode_layout = QtWidgets.QHBoxLayout()
+    swap_mode_layout.addWidget(create_delayed_help_label(
+        window.i18n.t("clicker.swap.mode", "Swap Click Button"),
+        window.i18n.t(
+            "help.clickerSwapMode",
+            "While the selected key or mouse button is held, the clicker swaps its button: left becomes right and right becomes left. Release it to restore the configured button.",
+        ),
+    ))
+    window.clickerSwapModeCombo = QtWidgets.QComboBox()
+    window.clickerSwapModeCombo.addItem(window.i18n.t("clicker.swap.off", "Disabled"), "off")
+    window.clickerSwapModeCombo.addItem(window.i18n.t("clicker.swap.key", "Keyboard Shortcut"), "key")
+    window.clickerSwapModeCombo.addItem(window.i18n.t("clicker.swap.mouseButton", "Mouse Button"), "mouseButton")
+    window.clickerSwapModeCombo.currentIndexChanged.connect(window._sync_clicker_swap_controls)
+    window.clickerSwapModeCombo.currentIndexChanged.connect(lambda _index: window._schedule_live_apply())
+    swap_mode_layout.addWidget(window.clickerSwapModeCombo)
+    swap_mode_layout.addStretch()
+    layout.addLayout(swap_mode_layout)
+
+    swap_key_layout = QtWidgets.QHBoxLayout()
+    window.clickerSwapKeyLabel = QtWidgets.QLabel(window.i18n.t("clicker.swap.key.input", "Hold Shortcut"))
+    swap_key_layout.addWidget(window.clickerSwapKeyLabel)
+    window.clickerSwapKeyCapture = HotkeyCapture(i18n=window.i18n, allow_simple=True)
+    window.clickerSwapKeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
+    swap_key_layout.addWidget(window.clickerSwapKeyCapture)
+    layout.addLayout(swap_key_layout)
+
+    swap_mouse_layout = QtWidgets.QHBoxLayout()
+    window.clickerSwapMouseLabel = QtWidgets.QLabel(window.i18n.t("clicker.swap.mouseButton.input", "Hold Mouse Button"))
+    swap_mouse_layout.addWidget(window.clickerSwapMouseLabel)
+    window.clickerSwapMouseCombo = QtWidgets.QComboBox()
+    window.clickerSwapMouseCombo.addItem(window.i18n.t("clicker.mouse.x1", "Side Button X1 (usually Back)"), "x1")
+    window.clickerSwapMouseCombo.addItem(window.i18n.t("clicker.mouse.x2", "Side Button X2 (usually Forward)"), "x2")
+    window.clickerSwapMouseCombo.addItem(window.i18n.t("clicker.mouse.middle", "Middle Button"), "middle")
+    window.clickerSwapMouseCombo.addItem(window.i18n.t("clicker.mouse.left", "Left Button"), "left")
+    window.clickerSwapMouseCombo.addItem(window.i18n.t("clicker.mouse.right", "Right Button"), "right")
+    window.clickerSwapMouseCombo.currentIndexChanged.connect(lambda _index: window._schedule_live_apply())
+    swap_mouse_layout.addWidget(window.clickerSwapMouseCombo)
+    swap_mouse_layout.addStretch()
+    layout.addLayout(swap_mouse_layout)
+
+    swap_hint = QtWidgets.QLabel(
+        window.i18n.t(
+            "clicker.swap.hint",
+            "Hold the swap source while the clicker runs to temporarily switch the clicked button between left and right.",
+        )
+    )
+    swap_hint.setWordWrap(True)
+    swap_hint.setStyleSheet("color: rgba(142, 142, 147, 0.95); font-size: 12px;")
+    layout.addWidget(swap_hint)
+
     sound_enabled_layout = QtWidgets.QHBoxLayout()
     window.clickerSoundEnabledCheck = QtWidgets.QCheckBox(window.i18n.t("clicker.sound.start.enabled", "Play start sound"))
     window.clickerSoundEnabledCheck.toggled.connect(window._sync_clicker_sound_controls)
@@ -436,7 +573,6 @@ def build_advanced_page(window) -> QtWidgets.QWidget:
     window.clickerConfigHint.setStyleSheet("color: rgba(142, 142, 147, 0.95); font-size: 12px;")
     layout.addWidget(window.clickerConfigHint)
     window._populate_clicker_profiles()
-
 
     layout.addWidget(create_section_label(window.i18n.t("macro.section", "Macro")))
 
@@ -700,104 +836,39 @@ def build_advanced_page(window) -> QtWidgets.QWidget:
     layout.addWidget(window.mouseMacroBuilderGroup)
     window._sync_mouse_macro_controls()
 
-    layout.addWidget(create_section_label(window.i18n.t("position.title", "Target Position")))
-    pos_layout = QtWidgets.QHBoxLayout()
-    window.posCombo = QtWidgets.QComboBox()
-    window.posCombo.addItem(window.i18n.t("position.virtualCenter", "Virtual screen center"), "virtualCenter")
-    window.posCombo.addItem(window.i18n.t("position.primaryCenter", "Primary screen center"), "primaryCenter")
-    window.posCombo.addItem(window.i18n.t("position.custom", "Custom"), "custom")
-    window.posCombo.currentIndexChanged.connect(lambda _index: window._schedule_live_apply())
-    current_mode = window.settings.data["position"].get("mode", "virtualCenter")
-    for i in range(window.posCombo.count()):
-        if window.posCombo.itemData(i) == current_mode:
-            window.posCombo.setCurrentIndex(i)
-            break
-    pos_layout.addWidget(window.posCombo)
-    layout.addLayout(pos_layout)
+    # Shortcuts & General category: global hotkeys, application settings
+    layout = _make_tab(window.i18n.t("adv.category.general", "Shortcuts & General"))
 
-    custom_layout = QtWidgets.QHBoxLayout()
-    custom_layout.addWidget(QtWidgets.QLabel("X:"))
-    window.customXSpin = QtWidgets.QSpinBox()
-    window.customXSpin.setRange(-10000, 10000)
-    window.customXSpin.setValue(window.settings.data["position"].get("customX", 0))
-    window.customXSpin.valueChanged.connect(lambda _value: window._schedule_live_apply())
-    custom_layout.addWidget(window.customXSpin)
-    custom_layout.addWidget(QtWidgets.QLabel("Y:"))
-    window.customYSpin = QtWidgets.QSpinBox()
-    window.customYSpin.setRange(-10000, 10000)
-    window.customYSpin.setValue(window.settings.data["position"].get("customY", 0))
-    window.customYSpin.valueChanged.connect(lambda _value: window._schedule_live_apply())
-    custom_layout.addWidget(window.customYSpin)
-    custom_layout.addStretch()
-    layout.addLayout(custom_layout)
+    layout.addWidget(create_section_label(window.i18n.t("section.hotkeys", "Hotkeys")))
 
-    layout.addWidget(create_section_label(window.i18n.t("window.specific.title", "Window-Specific Locking")))
-    window.windowSpecificCheck = QtWidgets.QCheckBox(
-        window.i18n.t("window.specific.enabled", "Enable window-specific locking")
+    hotkey_grid = QtWidgets.QGridLayout()
+    hotkey_grid.setSpacing(12)
+
+    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.lock", "Lock")), 0, 0)
+    window.lockHotkeyCapture = HotkeyCapture(i18n=window.i18n)
+    window.lockHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["lock"])
+    window.lockHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
+    hotkey_grid.addWidget(window.lockHotkeyCapture, 0, 1)
+
+    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.unlock", "Unlock")), 1, 0)
+    window.unlockHotkeyCapture = HotkeyCapture(i18n=window.i18n)
+    window.unlockHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["unlock"])
+    window.unlockHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
+    hotkey_grid.addWidget(window.unlockHotkeyCapture, 1, 1)
+
+    hotkey_grid.addWidget(QtWidgets.QLabel(window.i18n.t("hotkey.toggle", "Toggle")), 2, 0)
+    window.toggleHotkeyCapture = HotkeyCapture(i18n=window.i18n)
+    window.toggleHotkeyCapture.set_hotkey(window.settings.data["hotkeys"]["toggle"])
+    window.toggleHotkeyCapture.hotkeyChanged.connect(lambda _cfg: window._schedule_live_apply())
+    hotkey_grid.addWidget(window.toggleHotkeyCapture, 2, 1)
+
+    hotkey_hint = QtWidgets.QLabel(
+        window.i18n.t("clicker.hotkey.profileHint", "Auto clicker trigger keys are configured per clicker profile below.")
     )
-    window.windowSpecificCheck.setChecked(window.settings.data["windowSpecific"].get("enabled", False))
-    window.windowSpecificCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
-    layout.addWidget(window.windowSpecificCheck)
-
-    list_layout = QtWidgets.QVBoxLayout()
-    list_layout.setSpacing(8)
-    list_label = QtWidgets.QLabel(window.i18n.t("window.specific.listLabel", "Target Windows List"))
-    list_layout.addWidget(list_label)
-
-    window.targetList = QtWidgets.QListWidget()
-    window.targetList.setFixedHeight(120)
-    window.targetList.setStyleSheet("""
-        QListWidget {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(128, 128, 128, 0.3);
-            border-radius: 6px;
-            padding: 4px;
-        }
-    """)
-    for win_title in window.settings.data["windowSpecific"].get("targetWindows", []):
-        window.targetList.addItem(win_title)
-    list_layout.addWidget(window.targetList)
-
-    input_layout = QtWidgets.QHBoxLayout()
-    window.manualInputEdit = QtWidgets.QLineEdit()
-    window.manualInputEdit.setPlaceholderText(window.i18n.t("window.specific.placeholder", "Target window title"))
-    input_layout.addWidget(window.manualInputEdit)
-    window.pickProcessBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.pick", "Pick Process"))
-    window.pickProcessBtn.clicked.connect(window._pick_process)
-    input_layout.addWidget(window.pickProcessBtn)
-    list_layout.addLayout(input_layout)
-
-    btn_layout = QtWidgets.QHBoxLayout()
-    window.addBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.add", "Add"))
-    window.addBtn.clicked.connect(window._add_target_window)
-    btn_layout.addWidget(window.addBtn)
-    window.removeBtn = QtWidgets.QPushButton(window.i18n.t("window.specific.remove", "Remove"))
-    window.removeBtn.clicked.connect(window._remove_target_window)
-    btn_layout.addWidget(window.removeBtn)
-    btn_layout.addStretch()
-    list_layout.addLayout(btn_layout)
-    layout.addLayout(list_layout)
-
-    window.autoLockCheck = QtWidgets.QCheckBox(
-        window.i18n.t("window.specific.autoLock", "Auto lock/unlock on window switch")
-    )
-    window.autoLockCheck.setChecked(window.settings.data["windowSpecific"].get("autoLockOnWindowFocus", False))
-    window.autoLockCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
-    layout.addWidget(window.autoLockCheck)
-
-    window.resumeAfterSwitchCheck = QtWidgets.QCheckBox(
-        window.i18n.t("window.specific.resumeAfterSwitch", "Auto re-lock after leaving and re-entering target window (for manual unlock)")
-    )
-    window.resumeAfterSwitchCheck.setChecked(window.settings.data["windowSpecific"].get("resumeAfterWindowSwitch", False))
-    window.resumeAfterSwitchCheck.toggled.connect(lambda _checked: window._schedule_live_apply())
-    layout.addWidget(window.resumeAfterSwitchCheck)
-
-    layout.addWidget(create_section_label(window.i18n.t("section.windowTools", "Window Tools")))
-    window.resizeCenterBtn = QtWidgets.QPushButton(window.i18n.t("windowTools.resizeCenter", "Resize & Center Window"))
-    window.resizeCenterBtn.setFixedHeight(40)
-    window.resizeCenterBtn.setCursor(QtCore.Qt.PointingHandCursor)
-    window.resizeCenterBtn.clicked.connect(window._open_window_resize)
-    layout.addWidget(window.resizeCenterBtn)
+    hotkey_hint.setWordWrap(True)
+    hotkey_hint.setStyleSheet("color: rgba(142, 142, 147, 0.95); font-size: 12px;")
+    hotkey_grid.addWidget(hotkey_hint, 3, 0, 1, 2)
+    layout.addLayout(hotkey_grid)
 
     layout.addWidget(create_section_label(window.i18n.t("section.settings", "Settings")))
     lang_layout = QtWidgets.QHBoxLayout()
@@ -891,8 +962,4 @@ def build_advanced_page(window) -> QtWidgets.QWidget:
     live_apply_hint.setStyleSheet("color: rgba(142, 142, 147, 0.95); font-size: 12px;")
     layout.addWidget(live_apply_hint)
 
-    scroll.setWidget(content)
-    page_layout = QtWidgets.QVBoxLayout(page)
-    page_layout.setContentsMargins(0, 0, 0, 0)
-    page_layout.addWidget(scroll)
     return page

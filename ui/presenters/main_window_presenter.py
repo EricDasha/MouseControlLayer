@@ -26,6 +26,22 @@ def describe_clicker_preset(i18n, preset_key: str) -> str:
     return i18n.t("clicker.preset.desc.custom", "Manually set the click interval")
 
 
+def describe_clicker_swap_source(i18n, triggers: Dict[str, Any]) -> str:
+    """Return a readable label for the configured swap source, or empty when off."""
+    mode = str(triggers.get("swapMode", "off") or "off")
+    if mode == "key":
+        key_display = format_hotkey_display(triggers.get("swapKey", {}))
+        if not key_display or key_display == "?":
+            return ""
+        return key_display
+    if mode == "mouseButton":
+        button = str(triggers.get("swapMouseButton", "") or "")
+        if not button:
+            return ""
+        return i18n.t(f"clicker.mouse.{button}", button)
+    return ""
+
+
 def build_status_badge_presentation(
     i18n,
     *,
@@ -158,6 +174,9 @@ def build_simple_info_text(
             f"{i18n.t(preset_label_key, 'Custom')} @ {int(clicker.get('intervalMs', 100))}ms | "
             f"{i18n.t(clicker_trigger_modes.get(trigger_mode, ''), trigger_mode)}"
         )
+        swap_source = describe_clicker_swap_source(i18n, clicker.get("triggers", {}))
+        if swap_source:
+            clicker_text += f"\n  {i18n.t('simple.swap', 'Swap Button')}: {swap_source}"
     config_parts.append(clicker_text)
 
     hotkey_parts = []

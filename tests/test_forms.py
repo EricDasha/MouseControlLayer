@@ -147,22 +147,28 @@ class SettingsFormTests(unittest.TestCase):
             clickerSoundPresetCombo=_ComboWidget("systemAsterisk"),
             clickerCustomSoundPathEdit=_LineEditWidget(""),
             clickerProcessBlacklist=_ListWidget(["steam.exe", "steamwebhelper.exe"]),
-            clickerTriggerModeCombo=_ComboWidget("holdMouseButton"),
+clickerTriggerModeCombo=_ComboWidget("holdMouseButton"),
             clickerToggleHotkeyCapture=_HotkeyWidget({"key": "F6"}),
             clickerHoldKeyCapture=_HotkeyWidget({"key": "F7"}),
             clickerHoldMouseCombo=_ComboWidget("x1"),
+            clickerSwapModeCombo=_ComboWidget("mouseButton"),
+            clickerSwapKeyCapture=_HotkeyWidget({"key": "F8"}),
+            clickerSwapMouseCombo=_ComboWidget("x2"),
             _current_general_settings_form_data=lambda: {
                 "mouseMacros": {"enabled": True},
                 "recenter": {"enabled": False, "intervalMs": 500},
                 "startup": {"launchOnBoot": True},
             },
-        )
+)
 
         profile = collect_clicker_profile_form_data(window)
 
         self.assertEqual(profile["processBlacklist"], ["steam.exe", "steamwebhelper.exe"])
         self.assertEqual(profile["inputBackend"], "window-message")
         self.assertEqual(profile["triggers"]["holdMouseButton"], "x1")
+        self.assertEqual(profile["triggers"]["swapMode"], "mouseButton")
+        self.assertEqual(profile["triggers"]["swapKey"], {"key": "F8"})
+        self.assertEqual(profile["triggers"]["swapMouseButton"], "x2")
         self.assertEqual(profile["featureSettings"]["mouseMacros"], {"enabled": True})
         self.assertNotIn("startup", profile["featureSettings"])
 

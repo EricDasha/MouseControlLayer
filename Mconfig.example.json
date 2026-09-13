@@ -67,7 +67,16 @@
           "modWin": false,
           "key": "F7"
         },
-        "holdMouseButton": "middle"
+        "holdMouseButton": "middle",
+        "swapMode": "off",
+        "swapKey": {
+          "modCtrl": false,
+          "modAlt": false,
+          "modShift": false,
+          "modWin": false,
+          "key": "F8"
+        },
+        "swapMouseButton": "x1"
       }
     }
   ],
@@ -95,10 +104,10 @@
       "resumeAfterWindowSwitch": false
     }
   },
-  "startup": {
+"startup": {
     "launchOnBoot": false
   },
-  "closeAction": "minimize",
+  "closeAction": "ask",
   "mouseMacros": {
     "enabled": false,
     "source": "builder",

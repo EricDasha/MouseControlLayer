@@ -45,6 +45,11 @@ CLICKER_TRIGGER_MODES = {
     "holdMouseButton": "clicker.trigger.holdMouseButton",
 }
 
+# Swap sources: keep the clicker button as-is, swap it while a keyboard
+# shortcut or a mouse button is held, or disable the feature entirely.
+CLICKER_SWAP_MODES = ("off", "key", "mouseButton")
+DEFAULT_CLICKER_SWAP_MOUSE_BUTTON = "x1"
+
 DEFAULT_PROFILE_NAMES = {
     "en": "Default Profile",
     "zh-Hans": "默认方案",
@@ -110,6 +115,9 @@ class SettingsManager:
     }
     DEFAULT_HOLD_KEY = {
         "modCtrl": False, "modAlt": False, "modShift": False, "modWin": False, "key": "F7",
+    }
+    DEFAULT_SWAP_KEY = {
+        "modCtrl": False, "modAlt": False, "modShift": False, "modWin": False, "key": "F8",
     }
     DEFAULT_MOUSE_MACRO_PANIC_HOTKEY = {
         "modCtrl": False, "modAlt": False, "modShift": False, "modWin": False, "key": "F12",
@@ -268,6 +276,9 @@ class SettingsManager:
                 "toggleHotkey": deep_copy(self.DEFAULT_CLICKER_HOTKEY),
                 "holdKey": deep_copy(self.DEFAULT_HOLD_KEY),
                 "holdMouseButton": "middle",
+                "swapMode": "off",
+                "swapKey": deep_copy(self.DEFAULT_SWAP_KEY),
+                "swapMouseButton": DEFAULT_CLICKER_SWAP_MOUSE_BUTTON,
             },
         }
 
@@ -317,6 +328,15 @@ class SettingsManager:
             triggers.get("holdKey", {}), self.DEFAULT_HOLD_KEY
         )
         normalized["triggers"]["holdMouseButton"] = normalize_mouse_button(triggers.get("holdMouseButton", "middle"), "middle")
+        swap_mode = str(triggers.get("swapMode", "off") or "off").strip()
+        normalized["triggers"]["swapMode"] = swap_mode if swap_mode in CLICKER_SWAP_MODES else "off"
+        normalized["triggers"]["swapKey"] = normalize_hotkey(
+            triggers.get("swapKey", {}), self.DEFAULT_SWAP_KEY
+        )
+        normalized["triggers"]["swapMouseButton"] = normalize_mouse_button(
+            triggers.get("swapMouseButton", DEFAULT_CLICKER_SWAP_MOUSE_BUTTON),
+            DEFAULT_CLICKER_SWAP_MOUSE_BUTTON,
+        )
         feature_settings = source.get("featureSettings", {})
         normalized["featureSettings"] = deep_copy(feature_settings) if isinstance(feature_settings, dict) else {}
         return normalized

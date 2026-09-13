@@ -1372,8 +1372,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clickerHoldKeyCapture.setVisible(hold_key_visible)
         self.clickerHoldMouseLabel.setVisible(hold_mouse_visible)
         self.clickerHoldMouseCombo.setVisible(hold_mouse_visible)
+        self._sync_clicker_swap_controls()
         self._update_clicker_button()
         self._update_simple_info()
+
+    def _sync_clicker_swap_controls(self):
+        """Show only the swap source input matching the selected swap mode."""
+        if not hasattr(self, "clickerSwapModeCombo"):
+            return
+        mode = self.clickerSwapModeCombo.currentData() or "off"
+        key_visible = mode == "key"
+        mouse_visible = mode == "mouseButton"
+        self.clickerSwapKeyLabel.setVisible(key_visible)
+        self.clickerSwapKeyCapture.setVisible(key_visible)
+        self.clickerSwapMouseLabel.setVisible(mouse_visible)
+        self.clickerSwapMouseCombo.setVisible(mouse_visible)
 
     def _sync_clicker_sound_controls(self):
         """Show the custom sound path only for custom-file mode."""
@@ -1708,6 +1721,22 @@ class MainWindow(QtWidgets.QMainWindow):
             self.i18n.t("close.action.reset.done", "Close behavior has been reset to 'Ask every time'.")
         )
 
+    def _system_tray_available(self) -> bool:
+        """Return whether a system tray exists to hide into."""
+        return bool(QtWidgets.QSystemTrayIcon.isSystemTrayAvailable())
+
+    def _minimize_to_tray_or_quit(self, event) -> bool:
+        """Hide to tray when possible; otherwise close for real so the X always works."""
+        if not self._system_tray_available():
+            self.settings.data["closeAction"] = "quit"
+            self._persist_window_size_if_enabled()
+            event.accept()
+            self._quit()
+            return False
+        event.ignore()
+        self.hide()
+        return True
+
     def closeEvent(self, event):
         """Handle window close - minimize to tray or quit."""
         # Shift+Close always quits
@@ -1723,9 +1752,8 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog = CloseActionDialog(self, self.i18n)
             if dialog.exec() == QtWidgets.QDialog.Accepted:
                 if dialog.action == "minimize":
-                    event.ignore()
-                    self.hide()
-                    self._notify(self.i18n.t("tray.minimized", "Minimized to tray."))
+                    if self._minimize_to_tray_or_quit(event):
+                        self._notify(self.i18n.t("tray.minimized", "Minimized to tray."))
                 elif dialog.action == "quit":
                     self._persist_window_size_if_enabled()
                     event.accept()
@@ -1739,9 +1767,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Cancelled
                 event.ignore()
         elif action == "minimize":
-            self._persist_window_size_if_enabled()
-            event.ignore()
-            self.hide()
+            self._minimize_to_tray_or_quit(event)
         elif action == "quit":
             self._persist_window_size_if_enabled()
             event.accept()
